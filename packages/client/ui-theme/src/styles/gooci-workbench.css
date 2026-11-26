@@ -1,0 +1,54 @@
+/* GOOCI workbench palette. Loaded after the DeepSeek token sheet so the
+   running page stays on the console colors in both light and dark preference. */
+body,
+body[data-ds-dark-theme] {
+  color-scheme: light;
+  --dsw-static-deepseek-50: #f4f7fb;
+  --dsw-static-deepseek-100: #e8f1ff;
+  --dsw-static-deepseek-200: #d7e4f5;
+  --dsw-static-deepseek-300: #9ec0f5;
+  --dsw-static-deepseek-400: #5b9af5;
+  --dsw-static-deepseek-450: #3f86f5;
+  --dsw-static-deepseek-500: #3f86f5;
+  --dsw-static-deepseek-600: #2f6fe0;
+  --dsw-alias-bg-base: #f4f7fb;
+  --dsw-alias-bg-layer-1: #ffffff;
+  --dsw-alias-bg-layer-2: #ffffff;
+  --dsw-alias-bg-layer-3: #ffffff;
+  --dsw-alias-bg-module-platform: #f4f7fb;
+  --dsw-alias-border-l2: #e6eef6;
+  --dsw-alias-border-l3: #e6eef6;
+  --dsw-alias-brand-primary: #3f86f5;
+  --dsw-alias-brand-text: #2f6fe0;
+  --dsw-alias-button-primary-fill: #3f86f5;
+  --dsw-alias-button-primary-hover: #2f6fe0;
+  --dsw-alias-button-elevated-fill: #2f6fe0;
+  --dsw-alias-button-floating-hover: #3f86f5;
+  --dsw-alias-button-info-fill: #3f86f5;
+  --dsw-alias-button-info-hover: #2f6fe0;
+  --dsw-alias-label-primary: #1f2d3d;
+  --dsw-alias-markdown-inline-code: #e8f1ff;
+  --dsw-alias-markdown-tag: #e8f1ff;
+  --dsw-specific-selector: #e8f1ff;
+  --dsw-alias-interactive-bg-hover-solid: #d7e4f5;
+  --dsw-alias-button-floating-fill: #e8f1ff;
+  --dsw-alias-button-floating-hover: #d7e4f5;
+  --dsw-alias-label-primary-bluish: #2f6fe0;
+  --dsw-alias-label-secondary: #6b7c86;
+  --dsw-elevation-soft: 0 8px 24px rgba(47, 111, 224, 0.08);
+  --dsw-alias-label-tertiary: #6b7c86;
+  --dsw-alias-link: #2f6fe0;
+  --dsw-alias-state-business-primary: #3f86f5;
+  --dsw-alias-state-business-tertiary: #e8f1ff;
+  --dsw-specific-bubble: #e8f1ff;
+  --dsw-specific-bubble-highlight: #d7e4f5;
+  --dsw-specific-input-major: #ffffff;
+  --dsw-specific-sidebar-fill: #ffffff;
+  --dsw-specific-sidebar-nav-item-hover: #e8f1ff;
+  --dsw-specific-sidebar-nav-item-active: #e8f1ff;
+  --dsw-specific-sidebar-nav-item-active-accent: #3f86f5;
+  --dsw-font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  background-color: #f4f7fb;
+  color: #1f2d3d;
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+}

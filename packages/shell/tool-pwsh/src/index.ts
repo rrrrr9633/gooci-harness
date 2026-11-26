@@ -1,3 +1,4 @@
+// cursor-local-assistant:sandbox-permission-standing-mode:v1
 /**
  * Model-facing PowerShell Consumer of the `ctx.shell` capability seam. Intended for
  * Windows compositions where a PowerShell executor (e.g.
@@ -83,7 +84,7 @@ interface PwshForegroundResult {
 }
 
 /* jscpd:ignore-start -- minimal mirror of dsh-tool-bash's validation and execute plumbing (Agent Note). */
-function validatePwshArgs(args: PwshToolArgs): void {
+function validatePwshArgs(args: PwshToolArgs, standingPolicy?: SandboxExecutionPolicy): void {
   if (args.command.trim().length === 0) {
     throw new Error('invalid command: expected a non-empty string')
   }
@@ -95,7 +96,11 @@ function validatePwshArgs(args: PwshToolArgs): void {
   }
   // The escalation pairing (sandbox_permissions ⇔ justification, non-empty) is
   // the shared rule both enforcing families validate identically.
-  validateEscalationArgs(args.sandbox_permissions, args.justification)
+  // GPT-5.6 can echo the already-active mode with an empty justification.
+  // Only a different mode is an escalation and needs the strict pairing check.
+  if (args.sandbox_permissions === undefined || standingPolicy?.mode !== args.sandbox_permissions) {
+    validateEscalationArgs(args.sandbox_permissions, args.justification)
+  }
 }
 /* jscpd:ignore-end */
 
@@ -344,11 +349,15 @@ export function apply(ctx: Context, config: Config = {}): void {
     },
     /* jscpd:ignore-start -- the execute path mirrors dsh-tool-bash's by design (see the pwsh-tool-and-executor Agent Note). */
     async execute(args: PwshToolArgs, exec) {
-      validatePwshArgs(args)
       // Description is display metadata; workdir defaults to the caller's session.
       const standingPolicy = resolveSandboxPolicy(exec)
-      const approvedMode = args.sandbox_permissions !== undefined && args.justification !== undefined
-        ? await approvePwshEscalation(args.sandbox_permissions, args.justification, exec, standingPolicy)
+      validatePwshArgs(args, standingPolicy)
+      // Treat a request for the standing mode as no escalation. This is
+      // deliberately normalized before approval; wider modes retain the
+      // original non-empty-justification and user-approval flow.
+      const requestedMode = standingPolicy?.mode === args.sandbox_permissions ? undefined : args.sandbox_permissions
+      const approvedMode = requestedMode !== undefined && args.justification !== undefined
+        ? await approvePwshEscalation(requestedMode, args.justification, exec, standingPolicy)
         : undefined
       const policy = approvedMode === undefined
         ? standingPolicy

@@ -1,3 +1,4 @@
+// cursor-local-assistant:sandbox-permission-standing-mode:v1
 /**
  * Model-facing Consumer of the `ctx.shell` capability seam. Background calls
  * register process handles with `ctx.jobs`; their work uses job cancellation
@@ -51,7 +52,7 @@ interface BashToolArgs {
   justification?: string
 }
 
-function validateBashArgs(args: BashToolArgs): void {
+function validateBashArgs(args: BashToolArgs, standingPolicy?: SandboxExecutionPolicy): void {
   if (args.command.trim().length === 0) {
     throw new Error('invalid command: expected a non-empty string')
   }
@@ -63,7 +64,11 @@ function validateBashArgs(args: BashToolArgs): void {
   }
   // The escalation pairing (sandbox_permissions ⇔ justification, non-empty) is
   // the shared rule both enforcing families validate identically.
-  validateEscalationArgs(args.sandbox_permissions, args.justification)
+  // GPT-5.6 can echo the already-active mode with an empty justification.
+  // Only a different mode is an escalation and needs the strict pairing check.
+  if (args.sandbox_permissions === undefined || standingPolicy?.mode !== args.sandbox_permissions) {
+    validateEscalationArgs(args.sandbox_permissions, args.justification)
+  }
 }
 
 function bashDescription(backgroundEnabled: boolean, escalationModes: readonly SandboxMode[]): string {
@@ -327,11 +332,15 @@ export function apply(ctx: Context, config: Config = {}): void {
       }],
     },
     async execute(args: BashToolArgs, exec) {
-      validateBashArgs(args)
       // Description is display metadata; workdir defaults to the caller's session.
       const standingPolicy = resolveSandboxPolicy(exec)
-      const approvedMode = args.sandbox_permissions !== undefined && args.justification !== undefined
-        ? await approveBashEscalation(args.sandbox_permissions, args.justification, exec, standingPolicy)
+      validateBashArgs(args, standingPolicy)
+      // Treat a request for the standing mode as no escalation. This is
+      // deliberately normalized before approval; wider modes retain the
+      // original non-empty-justification and user-approval flow.
+      const requestedMode = standingPolicy?.mode === args.sandbox_permissions ? undefined : args.sandbox_permissions
+      const approvedMode = requestedMode !== undefined && args.justification !== undefined
+        ? await approveBashEscalation(requestedMode, args.justification, exec, standingPolicy)
         : undefined
       const policy = approvedMode === undefined
         ? standingPolicy

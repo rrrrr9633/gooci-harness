@@ -1,5 +1,6 @@
 CLAUDE.local.md
 .env
+.anonymous-user-id
 node_modules/
 lib/
 *.tsbuildinfo
@@ -8,6 +9,7 @@ pnpm-debug.log
 .cache/
 examples/*/*.jsonl
 .storages/
+storages/
 .sessions/
 examples/*/.sessions/
 coverage/
@@ -24,6 +26,7 @@ tmp/
 .claude/settings.json
 .vscode/
 .DS_Store
+._*
 .idea
 mise.toml
 dist-exe/

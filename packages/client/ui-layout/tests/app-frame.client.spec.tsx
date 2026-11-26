@@ -3,7 +3,7 @@
 import type { GlobalStandardProps, RenderOpts } from '@deepseek-ai/dsh-client-ui-slots'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
 import { AppFrame } from '../src/client/AppFrame.tsx'
 import type { AppFrameProps } from '../src/client/AppFrame.tsx'
 import type { MainPanelId, RightbarOwnerProps, SidebarOwnerProps } from '../src/client/index.ts'
@@ -60,13 +60,15 @@ function resize(width: number): void {
   })
 }
 
-function mountFrame(windowWidth = frameWidth) {
+function mountFrame(windowWidth = frameWidth, allowedModuleIds?: readonly string[], managedAccess = false) {
   vi.stubGlobal('innerWidth', windowWidth)
   const instance = createLayoutStore().create()
   const slotCalls: { key: string; props: object; options: RenderOpts | undefined }[] = []
   const renderSlot: AppFrameProps['renderSlot'] = (key, owner, options) => {
     slotCalls.push({ key, props: owner, options })
-    return <div data-testid={`${key}-content`} data-entry-key={options?.entryKey} />
+    return <div data-testid={`${key}-content`} data-entry-key={options?.entryKey}>
+      {key === 'main' && <textarea aria-label="测试草稿" />}
+    </div>
   }
   const useSessions: AppFrameProps['useSessions'] = sel => sel({
     ids: selectedSession === undefined ? [] : [selectedSession],
@@ -94,6 +96,8 @@ function mountFrame(windowWidth = frameWidth) {
   const element = () => (
     <AppFrame
       useStore={useStore}
+      managedAccess={managedAccess}
+      {...allowedModuleIds === undefined ? {} : { allowedModuleIds }}
       actions={instance.actions}
       renderSlot={renderSlot}
       useSessions={useSessions}
@@ -108,7 +112,7 @@ function mountFrame(windowWidth = frameWidth) {
   const frame = utils.container.firstElementChild as HTMLElement
   return {
     ...utils, instance, frame, slotCalls,
-    rerenderFrame: () => { utils.rerender(element()) },
+    rerenderFrame: (moduleIds = allowedModuleIds) => { allowedModuleIds = moduleIds; utils.rerender(element()) },
     rightOwner: () => slotCalls.findLast(c => c.key === 'rightbar')!.props as RightbarOwnerProps,
     sidebarOwner: () => slotCalls.findLast(c => c.key === 'sidebar')!.props as SidebarOwnerProps,
   }
@@ -246,6 +250,165 @@ describe('AppFrame', () => {
       expect(selectedSession).toBe(sessionId)
       expect(document.title).toBe(panelId === null ? 'Session title — DSH Local Build' : 'DSH Local Build')
     }
+  })
+})
+
+describe('AppFrame business navigation', () => {
+  it('keeps managed modules hidden until permissions arrive', () => {
+    window.history.replaceState(null, '', '/?fn=APP_EQKB')
+    const { queryByRole, getByRole, rerenderFrame } = mountFrame(frameWidth, undefined, true)
+    expect(queryByRole('navigation', { name: 'AI工具' })).toBeNull()
+    expect(queryByRole('heading', { name: 'AI设备知识库' })).toBeNull()
+    rerenderFrame(['APP_EQKB'])
+    expect(getByRole('heading', { name: 'AI设备知识库' })).toBeTruthy()
+  })
+  it('hides unavailable modules and removes the current page when permission changes', () => {
+    window.history.replaceState(null, '', '/?fn=APP_EQKB')
+    const { queryByRole, getByRole, rerenderFrame } = mountFrame(frameWidth, ['APP_EQKB'])
+    expect(getByRole('heading', { name: 'AI设备知识库' })).toBeTruthy()
+    expect(queryByRole('button', { name: 'AI排程预测' })).toBeNull()
+    rerenderFrame(['APP_APS'])
+    expect(queryByRole('heading', { name: 'AI设备知识库' })).toBeNull()
+    expect(queryByRole('button', { name: 'AI设备知识库' })).toBeNull()
+    expect(getByRole('button', { name: 'AI排程预测' })).toBeTruthy()
+    rerenderFrame([])
+    expect(queryByRole('navigation', { name: 'AI工具' })).toBeNull()
+  })
+  const path = window.location.href
+  afterEach(() => { window.history.replaceState(null, '', path) })
+
+  it('opens all seven module pages and all four hub subpages with their own pending data', () => {
+    window.history.replaceState(null, '', '?keep=a&keep=b&fn=APP_APS#order')
+    const { getByRole } = mountFrame()
+    const modules = within(getByRole('navigation', { name: 'AI工具' }))
+    expect(modules.getAllByRole('button', { name: /^(AI|安全生产|知识库)/ })).toHaveLength(7)
+    expect(modules.getByRole('button', { name: '收起工具页' })).toBeTruthy()
+    for (const [id, label, purpose, pending] of [
+      ['APP_EQKB', 'AI设备知识库', '保养要求', '维修案例'],
+      ['APP_SAFETY', '安全生产AI行为监控', '复核现场行为告警', '告警片段'],
+      ['APP_RDKB', '知识库研发辅助', '设计评审', '试验报告'],
+      ['APP_APS', 'AI排程预测', '可能延误的工序', '班次'],
+      ['APP_VOUCHER', 'AI凭证自动处理', '记账科目', '原始票据'],
+      ['APP_RECON', 'AI自动对账', '匹配收付款流水', '银行流水'],
+      ['AI_HUB', 'AI中台', '现场问题', '设备档案'],
+    ] as const) {
+      fireEvent.click(modules.getByRole('button', { name: label }))
+      const page = within(getByRole('main', { name: label }))
+      expect(page.getByText(purpose, { exact: false })).toBeTruthy()
+      expect(page.getByRole('heading', { name: '待接入内容' })).toBeTruthy()
+      expect(page.getByText(pending, { exact: false })).toBeTruthy()
+      const url = new URL(window.location.href)
+      expect(url.searchParams.get('fn')).toBe(id)
+      expect(url.searchParams.get('tab')).toBe(id === 'AI_HUB' ? 'qa' : null)
+      expect(url.searchParams.getAll('keep')).toEqual(['a', 'b'])
+      expect(url.hash).toBe('#order')
+    }
+    const hub = within(getByRole('main', { name: 'AI中台' }))
+    const tabs = within(hub.getByRole('navigation', { name: 'AI中台子页' }))
+    expect(tabs.getAllByRole('button')).toHaveLength(4)
+    for (const [id, name, pending] of [
+      ['qa', '设备问答', '手册引用'], ['search', '知识检索', '原文链接'],
+      ['flow', '流程执行', '执行回执'], ['safety', '安全分析', '风险分级标准'],
+    ] as const) {
+      fireEvent.click(tabs.getByRole('button', { name }))
+      expect(hub.getByRole('heading', { name })).toBeTruthy()
+      expect(hub.getByText(pending, { exact: false })).toBeTruthy()
+      const url = new URL(window.location.href)
+      expect(url.searchParams.get('tab')).toBe(id)
+      expect(url.searchParams.getAll('keep')).toEqual(['a', 'b'])
+      expect(url.hash).toBe('#order')
+    }
+  })
+
+  it('restores a direct URL on mount, remount, back and forward', async () => {
+    window.history.replaceState(null, '', '?org=plant&fn=AI_HUB&tab=flow#station')
+    const initial = window.location.href
+    const first = mountFrame()
+    expect(first.getByRole('heading', { name: '流程执行' })).toBeTruthy()
+    fireEvent.click(first.getByRole('button', { name: '知识检索' }))
+    const second = window.location.href
+    fireEvent.click(first.getByRole('button', { name: 'AI自动对账' }))
+    const third = window.location.href
+    expect(new URL(third).searchParams.has('tab')).toBe(false)
+    first.unmount()
+    const { getByRole } = mountFrame()
+    expect(getByRole('heading', { name: 'AI自动对账' })).toBeTruthy()
+    for (const [direction, href, name] of [
+      ['back', second, '知识检索'], ['back', initial, '流程执行'],
+      ['forward', second, '知识检索'], ['forward', third, 'AI自动对账'],
+    ] as const) {
+      await act(async () => {
+        const moved = new Promise<void>(resolve => window.addEventListener('popstate', () => resolve(), { once: true }))
+        window.history[direction]()
+        await moved
+      })
+      expect(window.location.href).toBe(href)
+      expect(getByRole('heading', { name })).toBeTruthy()
+    }
+  })
+
+  it('falls back for unknown module and tab values without rewriting the link', () => {
+    window.history.replaceState(null, '', '?fn=unknown&tab=missing#part')
+    const href = window.location.href
+    const { getByRole } = mountFrame()
+    expect(getByRole('main', { name: 'AI中台' })).toBeTruthy()
+    expect(getByRole('heading', { name: '设备问答' })).toBeTruthy()
+    expect(window.location.href).toBe(href)
+  })
+
+  it('collapses the business page from the AI tools rail without replacing the draft', () => {
+    window.history.replaceState(null, '', '?fn=AI_HUB&tab=search')
+    const { getByRole, queryByRole } = mountFrame()
+    const draft = getByRole('textbox') as HTMLTextAreaElement
+    fireEvent.change(draft, { target: { value: '未发送' } })
+    const href = window.location.href
+    const rail = getByRole('navigation', { name: 'AI工具' })
+    const toggle = getByRole('button', { name: '收起工具页' })
+    expect(rail.contains(toggle)).toBe(true)
+    fireEvent.click(toggle)
+    expect(queryByRole('main')).toBeNull()
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(getByRole('textbox')).toBe(draft)
+    fireEvent.click(getByRole('button', { name: 'AI中台' }))
+    expect(getByRole('heading', { name: '知识检索' })).toBeTruthy()
+    expect(window.location.href).toBe(href)
+    expect(draft.value).toBe('未发送')
+    fireEvent.click(toggle)
+    fireEvent.click(getByRole('button', { name: 'AI自动对账' }))
+    expect(getByRole('main', { name: 'AI自动对账' })).toBeTruthy()
+    expect(getByRole('textbox')).toBe(draft)
+  })
+
+  it('keeps the same draft across page changes, collapse and narrow layouts independently of the side tracks', () => {
+    window.history.replaceState(null, '', '?fn=AI_HUB&tab=qa')
+    const { frame, instance, getByRole, queryByRole, getByTestId } = mountFrame()
+    const draft = getByRole('textbox') as HTMLTextAreaElement
+    const pane = getByRole('complementary', { name: '会话与工作面板' })
+    const center = getByRole('main').parentElement!
+    expect(center.contains(pane)).toBe(true)
+    expect(center.contains(getByTestId('rightbar-content'))).toBe(false)
+    expect(center.contains(getByTestId('sidebar-content'))).toBe(false)
+    expect(center.dataset.stacked).toBeUndefined()
+    fireEvent.change(draft, { target: { value: '未发送：检修计划' } })
+    fireEvent.click(getByRole('button', { name: '安全分析' }))
+    const href = window.location.href
+    fireEvent.click(getByRole('button', { name: '收起会话' }))
+    expect(window.location.href).toBe(href)
+    expect(queryByRole('textbox')).toBeNull()
+    expect(pane.contains(draft)).toBe(true)
+    fireEvent.click(getByRole('button', { name: 'AI排程预测' }))
+    resize(1300)
+    act(() => { instance.actions.openRightbar(true, false) })
+    expect(tracks(frame)[1]).toBeGreaterThan(0)
+    expect(center.dataset.stacked).toBe('true')
+    fireEvent.click(getByRole('button', { name: '展开会话' }))
+    expect(getByRole('textbox')).toBe(draft)
+    expect(draft.value).toBe('未发送：检修计划')
+    resize(375)
+    expect(tracks(frame)).toEqual([56, 0])
+    fireEvent.click(getByRole('button', { name: 'AI自动对账' }))
+    expect(getByRole('main', { name: 'AI自动对账' })).toBeTruthy()
+    expect(getByRole('textbox')).toBe(draft)
   })
 })
 

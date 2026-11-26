@@ -1,18 +1,6 @@
-/**
- * Three-column shell frame, registered into the built-in 'root' slot (the web
- * shell renders only 'root'). Owns the grid tracks (sidebar | center |
- * rightbar), the drag handles (pointer capture + rAF throttle), the column
- * solve (columns.ts), and the child-slot render decisions: the sidebar slot
- * receives live parameters from that solve. The root-scoped main slot selects
- * the Conversation or a global panel. Each column occupant owns its Session
- * binding and reports the geometry it needs.
- *
- * The right column is a track, not a box: its occupant draws its panel anchored
- * to the frame's right edge at the resolved normal width, and the
- * track only decides whether the centre makes room for it. The occupant reports
- * shown/track/fullscreen through `ctx.layout`; fullscreen keeps the reported
- * track but hides the outer resize handle. Everything arrives through the framework
- * shares — zero cordis or framework imports, zero self-made hooks.
+/** The frame owns the sidebar and rightbar tracks. Between them, business navigation
+ * and the collapsible main outlet are independent of Session and panel selection.
+ * The rightbar occupant reports its track and fullscreen state through `ctx.layout`.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -22,7 +10,94 @@ import type {
 import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
+import { HUB_TABS, readBusinessPage, visibleBusinessModules } from './business-pages.ts'
+import type { BusinessModule, HubTab } from './business-pages.ts'
 import css from './AppFrame.module.css'
+
+function HexGlyph({ glyph }: { glyph: string }) {
+  const gradientId = `gooci-hex-${glyph}`
+  return (
+    <span className={css.hex} aria-hidden="true">
+      <svg viewBox="0 0 32 36" width="22" height="24">
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#8ecbff" />
+            <stop offset="1" stopColor="#2f78e6" />
+          </linearGradient>
+        </defs>
+        <polygon points="16,1 31,9.5 31,26.5 16,35 1,26.5 1,9.5" fill={`url(#${gradientId})`} />
+      </svg>
+      <span>{glyph}</span>
+    </span>
+  )
+}
+
+type OpenPage = (module: BusinessModule, tab?: HubTab) => void
+
+function ModuleRail({ collapsed, active, modules, open, expanded, toggle }: {
+  collapsed: boolean; active: BusinessModule | undefined; modules: readonly BusinessModule[]; open: OpenPage; expanded: boolean; toggle: () => void
+}) {
+  const toggleLabel = expanded ? '收起工具页' : '展开工具页'
+  return (
+    <nav className={css.modules} aria-label="AI工具" data-collapsed={collapsed || undefined}>
+      <div className={css.moduleHeader}>
+        {!collapsed && <span className={css.moduleCaption}>AI工具</span>}
+        <button type="button" className={css.moduleToggle} aria-label={toggleLabel} title={toggleLabel}
+          aria-expanded={expanded} aria-controls="workbench-business" onClick={toggle}>
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" aria-hidden="true">
+            <path d={expanded ? 'M10 3.5 5.5 8 10 12.5' : 'M6 3.5 10.5 8 6 12.5'} />
+          </svg>
+        </button>
+      </div>
+      {modules.map(item => (
+        <button
+          key={item.id}
+          type="button"
+          className={css.module}
+          data-active={expanded && item === active || undefined}
+          aria-current={expanded && item === active ? 'page' : undefined}
+          aria-label={collapsed ? item.label : undefined}
+          title={item.label}
+          onClick={() => { if (!expanded || item !== active) open(item) }}
+        >
+          <HexGlyph glyph={item.glyph} />
+          {!collapsed && <span className={css.moduleLabel}>{item.label}</span>}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
+function BusinessPage({ module, tab, open, expanded }: ReturnType<typeof readBusinessPage> & { open: OpenPage; expanded: boolean }) {
+  const content = module.id === 'AI_HUB' ? tab : module
+  const stage = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    if (stage.current) stage.current.inert = !expanded
+  }, [expanded])
+  return (
+    <main ref={stage} id="workbench-business" className={css.stage} aria-labelledby="business-page-title" aria-hidden={!expanded || undefined}>
+      <div key={module.id} className={css.stageContent}>
+        <h1 id="business-page-title" className={css.stageTitle}>{module.label}</h1>
+        <p className={css.stageSub}>{module.purpose}</p>
+        {module.id === 'AI_HUB' && (
+          <nav className={css.tabs} aria-label="AI中台子页">
+            {HUB_TABS.map(item => (
+              <button key={item.id} type="button" className={css.tab} data-active={item === tab || undefined}
+                aria-current={item === tab ? 'page' : undefined} onClick={() => { open(module, item) }}>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        )}
+        <div key={tab.id} className={css.stageDetails}>
+          {module.id === 'AI_HUB' && <><h2>{tab.label}</h2><p>{tab.purpose}</p></>}
+          <h2>待接入内容</h2>
+          <p>{content.pending}</p>
+        </div>
+      </div>
+    </main>
+  )
+}
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
@@ -30,11 +105,12 @@ export type AppFrameProps =
   & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.overlay'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
-
-/** Center column grid item (session-body building block). */
-function CenterColumn(props: { children?: ReactNode }) {
-  return <div className={css.centerCol}>{props.children}</div>
-}
+  & {
+    /** Managed mode never shows business modules until a server allowlist is available. */
+    managedAccess?: boolean
+    /** Module IDs from the current authenticated session; not a server authorization check. */
+    allowedModuleIds?: readonly string[]
+  }
 
 /** Subscribe to the main key without subscribing the column frame to each panel id. */
 function MainPanel({ usePanelInfo, renderSlot }: Pick<PropsRuntime<'root'>, 'usePanelInfo'> & PropsRenderSlots<'main'>) {
@@ -125,7 +201,30 @@ export function AppFrame({
   actions,
   renderSlot,
   t,
+  managedAccess,
+  allowedModuleIds,
 }: AppFrameProps) {
+  const [page, setPage] = useState(readBusinessPage)
+  const modules = visibleBusinessModules(managedAccess ? allowedModuleIds ?? [] : allowedModuleIds)
+  const activeModule = modules.includes(page.module) ? page.module : undefined
+  const [businessExpanded, setBusinessExpanded] = useState(true)
+  const [mainExpanded, setMainExpanded] = useState(true)
+  useEffect(() => {
+    const restore = () => { setPage(readBusinessPage()) }
+    window.addEventListener('popstate', restore)
+    return () => { window.removeEventListener('popstate', restore) }
+  }, [])
+  const openPage: OpenPage = (module, tab = module === page.module ? page.tab : HUB_TABS[0]) => {
+    if (!modules.includes(module)) return
+    setBusinessExpanded(true)
+    if (module === page.module && tab === page.tab) return
+    const url = new URL(window.location.href)
+    url.searchParams.set('fn', module.id)
+    if (module.id === 'AI_HUB') url.searchParams.set('tab', tab.id)
+    else url.searchParams.delete('tab')
+    if (url.href !== window.location.href) window.history.pushState(window.history.state, '', url)
+    setPage({ module, tab })
+  }
   const layoutInfo = useStore(state => state.layoutInfo)
   const frameRef = useRef<HTMLDivElement | null>(null)
   const viewport = layoutInfo.viewportWidth
@@ -213,20 +312,39 @@ export function AppFrame({
       data-rightbar-instant={layoutInfo.rightbarInstant || undefined}
       data-dragging={dragging || undefined}
     >
+      <header className={css.topbar}>
+        <span className={css.brand}>
+          <span className={css.mark} aria-hidden="true">G</span>
+          <b>谷器</b>
+        </span>
+        <button type="button" className={css.tab} aria-expanded={mainExpanded} aria-controls="workbench-main"
+          onClick={() => { setMainExpanded(value => !value) }}>
+          {mainExpanded ? '收起会话' : '展开会话'}
+        </button>
+        <span className={css.topActions} aria-hidden="true">
+          <span className={css.topDot} />
+          <span className={css.topDot} />
+          <span className={css.topDot} />
+          <span className={css.avatar}>A</span>
+        </span>
+      </header>
       <DocumentTitle
         productTitle={productTitle}
         useSessions={useSessions}
         usePanelInfo={usePanelInfo}
       />
       <div className={css.sidebarCol}>
-        {sidebar}
+        {modules.length > 0 && <ModuleRail collapsed={sidebarCollapsed} active={activeModule} modules={modules} open={openPage} expanded={businessExpanded}
+          toggle={() => { setBusinessExpanded(value => !value) }} />}
+        <div className={css.sessionDock}>{sidebar}</div>
       </div>
-      <>
-        <CenterColumn>{main}</CenterColumn>
-        <RightbarColumn>
-          {renderSlot('rightbar', { width: normal.rightbar, viewportWidth: viewport, canShow: normal.rightbar > 0 })}
-        </RightbarColumn>
-      </>
+      <div className={css.centerCol} data-stacked={cols.center < 760 || undefined} data-business-hidden={!businessExpanded || !activeModule || undefined}>
+        {activeModule && <BusinessPage {...page} open={openPage} expanded={businessExpanded} />}
+        <aside id="workbench-main" aria-label="会话与工作面板" className={css.stageBody} hidden={!mainExpanded}>{main}</aside>
+      </div>
+      <RightbarColumn>
+        {renderSlot('rightbar', { width: normal.rightbar, viewportWidth: viewport, canShow: normal.rightbar > 0 })}
+      </RightbarColumn>
       <div className={css.overlayLayer} data-shell-overlay>
         {overlays}
       </div>

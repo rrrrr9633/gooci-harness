@@ -152,6 +152,7 @@
   font-weight: 600;
   line-height: 24px;
   letter-spacing: 0.04em;
+  color: #2b8fb6;
 }
 
 .fallbackBrandName {
@@ -236,8 +237,8 @@
   height: 10px;
   padding: 0 3px;
   border-radius: 2px;
-  color: var(--dsw-alias-label-primary-inverted);
-  background: var(--dsw-alias-label-primary);
+  color: #fff;
+  background: #2b8fb6;
   font-family: var(--ds-font-family-code);
   font-size: 6px;
   font-weight: 500;
@@ -260,7 +261,7 @@
   border: 0.5px solid var(--dsw-alias-border-l3);
   border-radius: 12px;
   background: var(--dsw-alias-button-elevated-fill);
-  color: var(--dsw-alias-label-primary);
+  color: #fff;
   font-size: 14px;
   font-weight: 500;
   line-height: 22px;

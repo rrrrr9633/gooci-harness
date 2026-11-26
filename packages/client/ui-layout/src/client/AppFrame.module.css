@@ -1,13 +1,78 @@
 .frame {
   position: relative; /* anchors the drag handles, which straddle column borders */
   display: grid;
-  grid-template-rows: 100%;
+  grid-template-rows: 56px minmax(0, 1fr);
   height: 100%;
   overflow: hidden;
-  background: var(--dsw-alias-bg-base);
+  background: #f4f7fb;
   /* Collapse/expand animates the tracks on the deepsuite sider curve
      (--ds-ease-in-out / --ds-transition-duration-slow, ui-theme base.css). */
   transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+.topbar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  height: 56px;
+  background: #3f86f5;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 20px;
+  z-index: 30;
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.topActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.topDot {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  color: #2f6fe0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  line-height: 1;
+}
+
+.brand b {
+  font-size: 20px;
+  letter-spacing: 0.04em;
+}
+
+.mark {
+  width: 28px;
+  height: 32px;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: #fff;
+  color: #2f6fe0;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 14px;
 }
 
 /* Dragging writes widths at pointer cadence; easing them would detach the
@@ -23,17 +88,251 @@
 }
 
 .sidebarCol {
+  grid-column: 1;
+  grid-row: 2;
   min-width: 0;
   overflow: hidden;
-  background: var(--dsw-specific-sidebar-fill);
-  border-right: 0.5px solid var(--dsw-alias-border-l3);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid #e6eef6;
+}
+
+.modules {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px 8px;
+  border-bottom: 1px solid #e6eef6;
+}
+
+.modules[data-collapsed] {
+  align-items: center;
+  padding: 8px 4px;
+}
+
+.moduleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.moduleCaption {
+  padding: 2px 10px 6px;
+  color: #8aa0b8;
+  font-size: 12px;
+}
+
+.moduleToggle {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #5c6b7a;
+  cursor: pointer;
+}
+
+.moduleToggle:hover,
+.moduleToggle:focus-visible {
+  background: #e8f1ff;
+  color: #2458c8;
+}
+
+.module {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #5c6b7a;
+  padding: 7px 8px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modules[data-collapsed] .module {
+  width: 36px;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.module[data-active] {
+  background: #e8f1ff;
+  color: #2f6fe0;
+  font-weight: 600;
+}
+
+.hex {
+  position: relative;
+  width: 22px;
+  height: 24px;
+  flex: 0 0 auto;
+  color: #fff;
+}
+
+.hex svg {
+  display: block;
+}
+
+.hex > span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.moduleLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessionDock {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sessionDock > * {
+  height: 100%;
 }
 
 .centerCol {
+  grid-column: 2;
+  grid-row: 2;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: #f4f7fb;
+}
+
+.centerCol[data-stacked] {
+  flex-direction: column;
+}
+
+.stage {
+  flex: 0 0 calc(100% - min(46%, 42rem) - 24px);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  transition: flex-basis 200ms ease, opacity 160ms ease, visibility 200ms;
+}
+
+.centerCol[data-stacked] .stage {
+  flex-basis: calc(46% - 8px);
+}
+
+.centerCol[data-business-hidden] .stage {
+  flex-basis: 0;
+  opacity: 0;
+  visibility: hidden;
+  overflow: hidden;
+}
+
+.centerCol:has(.stageBody[hidden]) .stage:not([inert]) {
+  flex-basis: 100%;
+}
+
+.stageContent {
+  padding: 18px clamp(12px, 2vw, 28px);
+}
+
+.stageContent,
+.stageDetails {
+  animation: tool-enter 180ms ease-out;
+}
+
+@keyframes tool-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage { transition: none; }
+  .stageContent,
+  .stageDetails { animation: none; }
+}
+
+.stageTitle {
+  margin: 0;
+  color: #2458c8;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 36px;
+}
+
+.stageSub {
+  margin: 2px 0 12px;
+  color: #8aa0b8;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tab {
+  border: 1px solid #d7e4f5;
+  border-radius: 999px;
+  background: #fff;
+  color: #5c6b7a;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.tab[data-active] {
+  border-color: transparent;
+  background: #e8f1ff;
+  color: #2f6fe0;
+}
+
+.stageBody {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  margin: 12px;
   overflow: hidden;
+  border: 1px solid #e6eef6;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(47, 111, 224, 0.06);
+}
+
+.centerCol[data-stacked] .stageBody {
+  margin: 4px;
+}
+
+.stageBody[hidden] {
+  display: none;
+}
+
+.stageBody > * {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Drag handles are frame children (columns clip overflow): an 8px hit strip
@@ -44,7 +343,7 @@
    over the centre. */
 .handle {
   position: absolute;
-  top: 0;
+  top: 56px;
   bottom: 0;
   width: 8px;
   margin-left: -4px;
@@ -82,6 +381,8 @@
  * where it is. The occupant draws its own left border.
  */
 .rightbarCol {
+  grid-column: 3;
+  grid-row: 2;
   position: relative;
   min-width: 0;
   overflow: visible;
@@ -89,7 +390,10 @@
 
 .overlayLayer {
   position: absolute;
-  inset: 0;
+  top: 56px;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 20;
   pointer-events: none;
 }

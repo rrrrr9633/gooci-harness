@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package provides the Web GUI's three-column AppFrame, edge-column widths, and `ctx.layout` presentation control. The right column concedes space before the center; its occupant renders fullscreen while the frame retains the wide-screen track underneath. The theme presenter owns color scheme, alias tokens, content font size, and document metadata. Layout state resets on reload.
+This package provides the Web GUI's business pages, persistent main outlet and independent sidebar and rightbar tracks. The rightbar concedes space before the center; its occupant renders fullscreen while the frame retains the wide-screen track underneath. The theme presenter owns color scheme, alias tokens, content font size, and document metadata.
 
 ## Table of Contents
 
@@ -26,6 +26,10 @@ This package provides the Web GUI's three-column AppFrame, edge-column widths, a
 ## Use this package
 
 The root slot composes the sidebar, main content, and right column. The sidebar spans 264–420px, defaults to 280px, and retains a 56px rail when collapsed; below 1024px it collapses automatically, and opening the right panel collapses a manually expanded sidebar. The right panel first opens at 45% of the viewport, then retains the user's pixel preference, capped at 70%. To protect 400px for the center, the frame first reduces the right panel to 300px, then reports insufficient room so its occupant closes it, and only then compresses the center further. Dragging has no transition delay; the right handle is absent while closed or fullscreen.
+
+The seven AI tool entries open business pages describing their purpose and pending integrations; they do not execute business operations. `fn` selects the module. For example, `?fn=AI_HUB&tab=search` opens knowledge search. The hub accepts `qa`, `search`, `flow`, and `safety`; other modules do not use `tab`. Missing or unknown selections fall back to the hub or its Q&A page. Navigation preserves other query parameters and the fragment, and refresh, Back and Forward restore the selected page.
+
+The main outlet sits to the right of the business page and below it when the center is narrower than 760px. The AI tools rail toggle hides the business page without hiding its entries, giving the visible main outlet the full center. Selecting the same tool reopens its current subpage. The header toggle independently hides the main outlet without unmounting the Conversation, composer or selected global panel. Switching business pages does not change the Session or discard its draft. The sidebar and rightbar remain independent.
 
 Global panels occupy the root-scoped `main` keyed slot; `conversation` is the reserved key for the Conversation. `ctx.layout.selectPanel(id)` selects a registered panel, and `null` selects the Conversation without changing the current Session. No global panel is registered by the shipped composition.
 

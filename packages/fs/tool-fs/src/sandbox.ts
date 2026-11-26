@@ -1,3 +1,4 @@
+// cursor-local-assistant:sandbox-permission-standing-mode:v1
 /**
  * The sandbox-escalation API shared by the `write` and `edit` tools: the
  * per-call policy resolution, the advertised escalation fields, and the denial-marker
@@ -85,8 +86,14 @@ export class FsSandboxController {
    *   unsandboxed backend.
    */
   async resolvePolicy(toolName: string, args: FsEscalationArgs, exec: ToolExecution): Promise<SandboxExecutionPolicy | undefined> {
-    validateEscalationArgs(args.sandbox_permissions, args.justification)
     const standingPolicy = this.policy?.resolve({ ...exec.agent ? { session: exec.agent.session } : {} })
+    // GPT-5.6 may include the current standing mode as redundant tool
+    // arguments. It is not an escalation, so ignore both fields before
+    // validation; a different mode remains strictly validated and approved.
+    if (args.sandbox_permissions !== undefined && standingPolicy?.mode === args.sandbox_permissions) {
+      return standingPolicy
+    }
+    validateEscalationArgs(args.sandbox_permissions, args.justification)
     if (args.sandbox_permissions === undefined || args.justification === undefined) {
       return standingPolicy
     }

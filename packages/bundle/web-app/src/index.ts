@@ -26,6 +26,12 @@ import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-shell-env'
+import { createCloudLaunchRedeemer } from './gooci-cloud-launch.ts'
+import { loadGoociDotEnv } from './gooci-dot-env.ts'
+import { goociEmployeeEnterRoute } from './gooci-employee-enter.ts'
+import { goociLocalEmployeeOrigin, goociRedeemUrl } from './gooci-employee-origin.ts'
+import { goociEmployeeCookie, goociEmployeeSessionRoute } from './gooci-employee-route.ts'
+import { createGoociEmployeeSessions } from './gooci-employee-sessions.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'web-app'
@@ -223,6 +229,33 @@ export const internals: {
  * @param config - validated {@link Config}.
  */
 export function apply(ctx: Context, config: Config): void {
+  loadGoociDotEnv()
+  const employeeOrigin = goociLocalEmployeeOrigin()
+  if (employeeOrigin !== undefined) {
+    const local = process.env.GOOCI_DELIVERY_EDITION === 'local'
+    const redeem = createCloudLaunchRedeemer(
+      (local ? process.env.GOOCI_LOCAL_DEPLOYMENT_ID : process.env.GOOCI_EMPLOYEE_DEPLOYMENT_ID) ?? '',
+      (local ? process.env.GOOCI_LOCAL_DEPLOYMENT_CREDENTIAL : process.env.GOOCI_EMPLOYEE_DEPLOYMENT_CREDENTIAL) ?? '',
+      fetch,
+      goociRedeemUrl(employeeOrigin),
+    )
+    const sessions = createGoociEmployeeSessions(redeem)
+    ctx.effect(() => ctx.webServer.register(goociEmployeeSessionRoute(employeeOrigin, sessions)), 'web-app: Gooci employee session')
+    ctx.effect(() => ctx.webServer.register(goociEmployeeEnterRoute(employeeOrigin)), 'web-app: Gooci employee enter')
+    ctx.inject(['connection'], (connCtx) => {
+      const originalIndex = connCtx.connection.authorizeIndex.bind(connCtx.connection)
+      const originalRejection = connCtx.connection.requestRejection.bind(connCtx.connection)
+      connCtx.connection.authorizeIndex = (req, res) => {
+        if (sessions.identify(goociEmployeeCookie(req.headers))) return true
+        return originalIndex(req, res)
+      }
+      connCtx.connection.requestRejection = (req) => {
+        const rejection = originalRejection(req)
+        if (rejection === 401 && sessions.identify(goociEmployeeCookie(req.headers))) return undefined
+        return rejection
+      }
+    })
+  }
   const runtime = resolveLanTrust(ctx.webServer.host, config.trustedHosts)
   // The loopback URL belongs to this host. Under SSH, the operator reaches it
   // through a local forwarding address that this process cannot derive.
