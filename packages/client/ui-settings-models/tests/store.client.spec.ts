@@ -88,6 +88,7 @@ function api(overrides: {
       : remoteFail(response.result.error.message)
   }
   const face = {
+    $host: { home: undefined as string | undefined, isLoopback: true },
     llm: {
       listProviders: () => mapProviderBatch(rows => rows
         .filter(row => row.active)
@@ -284,6 +285,17 @@ describe('edge joins', () => {
       status: 'error',
       error: 'settings are unavailable in this browser',
     })
+  })
+
+  it('locks a remote Host document and its credentials as read-only', async () => {
+    const { ctx, face, mirror } = api()
+    face.$host = { home: undefined, isLoopback: false }
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    await store.load()
+    const state = store.store.getSnapshot()
+    expect(state.status).toBe('ready')
+    expect(state.writable).toBe(false)
+    expect(state.rows.every(row => row.credential === undefined || !row.credential.writable)).toBe(true)
   })
 
   it('reuses a held settings view after its refresh fails', async () => {
