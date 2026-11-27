@@ -94,7 +94,7 @@ kind: "package-reference"
 
 这些限制说明设置传输层够不到的地方；它们是当前包约束。
 
-- **非 loopback 页面没有持久化设置**：本 Client 在那里禁用 Host 持久化，因此 scope 以 `unavailable` 起步且从不跨线路；尽管 Connection 认证覆盖 API，它支撑的每一行仍在那里无效。
+- **远程浏览器只读 Host 设置**：已认证的非 loopback 页面会读取 Host 文档，但 `writable` 为 false；除非 Host 是 loopback，Connection 拒绝设置与凭据写入。
 
 <a id="dev-note"></a>
 ### 开发备注
