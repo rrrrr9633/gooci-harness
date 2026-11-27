@@ -35,8 +35,8 @@ function rejected<T>(): Answer<T> {
 }
 
 /** The providing plugin's context, scripted down to the settings namespace. */
-function ctxWith(settings: object) {
-  return { remote: { settings } } as never
+function ctxWith(settings: object, isLoopback = true) {
+  return { remote: { $host: { home: undefined, isLoopback }, settings } } as never
 }
 
 function view(value: JsonValue, revision = 0): SettingsNamespaceView {
@@ -435,7 +435,22 @@ describe('SettingsScopeController', () => {
     expect(scope.getSnapshot()).toMatchObject({ value: { preference: 'dark' }, revision: 1 })
   })
 
-  it('keeps a remote browser in memory mode without Host calls', async () => {
+  it('reads a remote Host document and drops writes without a mutate call', async () => {
+    const describeCall = vi.fn().mockResolvedValueOnce(described({ preference: 'dark' }, 3))
+    const mutate = vi.fn()
+    const ctx = ctxWith({ describe: describeCall, mutate }, false)
+    const mirror = new SettingsDescribeMirror(ctx)
+    const scope = new SettingsScopeController<UiTestSettings>(
+      ctx, { namespace: 'ui-test' }, mirror, 'host', settingsSchema)
+    await mirror.load()
+    expect(scope.getSnapshot()).toMatchObject({
+      status: 'ready', writable: false, value: { preference: 'dark' },
+    })
+    await scope.set('preference', 'light')
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('keeps a memory-mode scope off the Host wire', async () => {
     const describeCall = vi.fn()
     const mutate = vi.fn()
     const ctx = ctxWith({ describe: describeCall, mutate })

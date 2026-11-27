@@ -224,18 +224,20 @@ export class ModelsSettingsStore {
       else credentialError = response.error.message
     }
     if (generation !== this.generation) return
+    const remote = !this.ctx.remote.$host.isLoopback
     this.store.update((s) => {
       s.status = 'ready'
       s.error = null
       s.credentialError = credentialError
-      s.writable = writable
+      s.writable = remote ? false : writable
       s.rows = rows.map((row) => {
         const named = row.apiKeyEnv === undefined ? undefined : credentials[row.apiKeyEnv]
         const derived = row.apiKeyEnv !== undefined ? undefined : credentials[deriveKeyRef(row.entry.provider)]
+        const lock = (info: CredentialInfo): CredentialInfo => remote ? { ...info, writable: false } : info
         return {
           ...row,
-          ...named === undefined ? {} : { credential: named },
-          ...derived === undefined ? {} : { derivedCredential: derived },
+          ...named === undefined ? {} : { credential: lock(named) },
+          ...derived === undefined ? {} : { derivedCredential: lock(derived) },
         }
       })
       s.namespaces = namespaces

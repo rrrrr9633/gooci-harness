@@ -7,7 +7,7 @@ import type {} from '@deepseek-ai/dsh-credentials'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import { API_PATH } from './api-path.ts'
 import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES } from './http-bridge.ts'
-import { assertTrustedAuthority } from './api-request-trust.ts'
+import { assertTrustedAuthority, isLoopbackApiRequest } from './api-request-trust.ts'
 import { BrowserAuth } from './browser-auth.ts'
 import { HostConnectionService } from './rpc-host.ts'
 import { ConnectionRecoveryConfigSchema, resolveConnectionConfig, type ConnectionRecoveryConfig } from './recovery-config.ts'
@@ -122,6 +122,14 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
       table.push({ kind: 'global', name: '__DSH_CONNECTION_RECOVERY__', value: recovery })
     })
     const fetchHandler = connection.createSharedFetchHandler(API_PATH)
+    const guardedHandler: typeof fetchHandler = {
+      requestBodyMode: request => fetchHandler.requestBodyMode(request),
+      async fetch(request) {
+        const refusal = await remoteHostMutationRefusal(request)
+        if (refusal !== undefined) return refusal
+        return fetchHandler.fetch(request)
+      },
+    }
     const route: WebRoute = {
       kind: 'prefix',
       path: API_PATH,
@@ -132,12 +140,53 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
           res.end(rejection === 401 ? 'unauthorized' : 'forbidden')
           return
         }
-        await bridge(req, res, fetchHandler, maxRequestBodyBytes)
+        await bridge(req, res, guardedHandler, maxRequestBodyBytes)
       },
     }
     webCtx.effect(() => webCtx.webServer.register(route), 'client-connection: /api route')
   })
   ctx.inject(['attachments'], (attachmentCtx) => {
     assertImageBodyCapacity(attachmentCtx, maxRequestBodyBytes)
+  })
+}
+
+const HOST_MUTATION_ENDPOINTS = new Set([
+  'settings/update',
+  'settings/replace',
+  'settings/mutate',
+  'settings/openSettingsDocument',
+  'settings/openAgentPresetDirectory',
+  'credentials/set',
+  'credentials/unset',
+])
+
+function remoteHostMutationRefusal(request: Request): Promise<Response | undefined> | undefined {
+  if (isLoopbackApiRequest(request)) return undefined
+  const pathname = new URL(request.url).pathname
+  if (!pathname.startsWith(`${API_PATH}/`)) return undefined
+  const endpoint = pathname.slice(API_PATH.length + 1)
+  if (!HOST_MUTATION_ENDPOINTS.has(endpoint)) return undefined
+  return refuseRemoteMutation(request, endpoint)
+}
+
+async function refuseRemoteMutation(request: Request, endpoint: string): Promise<Response> {
+  let rpcId = 'invalid-request'
+  try {
+    const body = await request.clone().json() as { rpcId?: unknown }
+    if (typeof body.rpcId === 'string' && body.rpcId.length > 0) rpcId = body.rpcId
+  } catch {
+    // The shared-channel decoder still owns malformed envelopes.
+  }
+  return Response.json({
+    type: 'server-response',
+    rpcId,
+    result: {
+      ok: false,
+      error: {
+        code: 'settings/rejected',
+        message: 'this deployment does not accept host configuration writes from a remote browser',
+        details: { endpoint },
+      },
+    },
   })
 }

@@ -50,4 +50,11 @@ describe('settings domain base plugin', () => {
     await Promise.resolve()
     expect(describeCall).toHaveBeenCalledTimes(1)
   })
+
+  it('reads the Host document from a remote browser', async () => {
+    const { describeCall, remote, fiber } = bench()
+    remote.$host = { home: undefined, isLoopback: false }
+    await fiber.await()
+    await vi.waitFor(() => { expect(describeCall).toHaveBeenCalledTimes(1) })
+  })
 })

@@ -225,7 +225,10 @@ describe('connection node half', () => {
         fakeRequest({ host: 'harness.example', cookie }, `${API_PATH}/${method}`),
         allowed.response,
       )
-      expect([method, allowed.state.status]).toEqual([method, 404])
+      expect([method, allowed.state.status]).toEqual([
+        method,
+        method === 'settings/openAgentPresetDirectory' ? 200 : 404,
+      ])
     }
 
     const forged = fakeResponse()
@@ -261,6 +264,58 @@ describe('connection node half', () => {
       cookie: browserCookie(connection, 'harness.example:3080'),
     }), declared.response)
     expect(declared.state.status).toBe(404)
+    await dispose()
+  })
+
+  it('refuses host configuration writes from a remote browser and keeps loopback writes on the bridge', async () => {
+    const { routes, connection, dispose } = await mounted({ trustedHosts: ['harness.example:3080'] })
+    const remoteHostEndpoints = [
+      'settings/update',
+      'settings/replace',
+      'settings/mutate',
+      'settings/openSettingsDocument',
+      'settings/openAgentPresetDirectory',
+      'credentials/set',
+      'credentials/unset',
+    ]
+    for (const [index, endpoint] of remoteHostEndpoints.entries()) {
+      const envelope = {
+        type: 'client-request',
+        rpcId: `write-${index}`,
+        method: endpoint,
+        payload: { args: { ref: 'DEEPSEEK_API_KEY', value: 'sk-live' } },
+      }
+      const remote = fakeResponse()
+      await routes[0]!.handler(fakePost({
+        host: 'harness.example:3080',
+        origin: 'https://harness.example:3080',
+        cookie: browserCookie(connection, 'harness.example:3080'),
+      }, `${API_PATH}/${endpoint}`, envelope), remote.response)
+      expect(remote.state.status).toBe(200)
+      expect(JSON.parse(String(remote.state.body))).toMatchObject({
+        type: 'server-response',
+        rpcId: `write-${index}`,
+        result: {
+          ok: false,
+          error: {
+            code: 'settings/rejected',
+            details: { endpoint },
+          },
+        },
+      })
+    }
+    const loopbackEnvelope = {
+      type: 'client-request',
+      rpcId: 'write-loopback',
+      method: 'credentials/set',
+      payload: { args: { ref: 'DEEPSEEK_API_KEY', value: 'sk-live' } },
+    }
+    const loopback = fakeResponse()
+    await routes[0]!.handler(fakePost({
+      host: '127.0.0.1:3080',
+      cookie: browserCookie(connection, '127.0.0.1:3080'),
+    }, `${API_PATH}/credentials/set`, loopbackEnvelope), loopback.response)
+    expect(loopback.state.status).toBe(404)
     await dispose()
   })
 
@@ -548,7 +603,9 @@ describe('connection node half over a real HTTP server', () => {
 
       const declaredCookie = browserCookie(connection, 'harness.example')
       for (const method of methods) {
-        expect([method, await call(port, method, 'harness.example', declaredCookie)]).toEqual([method, 404])
+        const status = method === 'settings/openSettingsDocument'
+          || method === 'settings/openAgentPresetDirectory' ? 200 : 404
+        expect([method, await call(port, method, 'harness.example', declaredCookie)]).toEqual([method, status])
       }
       const loopbackAuthority = `127.0.0.1:${String(port)}`
       expect(await call(

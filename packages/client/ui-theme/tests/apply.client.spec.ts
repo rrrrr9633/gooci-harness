@@ -182,7 +182,6 @@ describe('ui-theme apply', () => {
     const remoteTheme = remote.ctx.get('theme') as ThemeRuntime
     remoteTheme.setTheme('dark')
     await Promise.resolve()
-    expect(remote.describe).not.toHaveBeenCalled()
     expect(remote.mutate).not.toHaveBeenCalled()
   })
 

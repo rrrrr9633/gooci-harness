@@ -116,3 +116,18 @@ export function isTrustedApiRequest(request: ConnectionTrustRequest, trustedHost
     return false
   }
 }
+
+/**
+ * Whether one authenticated /api request arrived through loopback Host.
+ * Remote employee browsers fail this even when `trustedHosts` accepted them.
+ * @param request - Fetch or node:http request facts.
+ */
+export function isLoopbackApiRequest(request: ConnectionTrustRequest | Request): boolean {
+  const headers = request.headers
+  const host = headers instanceof Headers
+    ? headers.get('host') ?? undefined
+    : typeof headers.host === 'string' ? headers.host : undefined
+  if (host === undefined) return false
+  const hostUrl = parseAuthority(host)
+  return hostUrl !== undefined && isLoopbackHostname(hostUrl.hostname)
+}

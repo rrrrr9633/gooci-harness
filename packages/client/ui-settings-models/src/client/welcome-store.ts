@@ -1,12 +1,11 @@
 /**
  * Welcome-notice state derived from the welcome settings scope. The scope is
  * the transport: a loopback browser follows the durable Host section, while a
- * remote browser's memory-mode scope never answers and the acknowledgement
- * stays process-local here.
+ * remote read-only Host snapshot keeps the acknowledgement process-local.
  */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_VERSION,
 } from '../onboarding-copy.ts'
@@ -51,8 +50,8 @@ export class WelcomeNoticeStore {
   private following: (() => void) | undefined
 
   /**
-   * @param scope - the welcome settings namespace scope; its memory mode is
-   * what keeps a remote browser process-local.
+   * @param scope - the welcome settings namespace scope; a read-only Host
+   * snapshot keeps a remote browser process-local.
    */
   constructor(private readonly scope: SettingsScope<WelcomeSection>) {}
 
@@ -73,7 +72,7 @@ export class WelcomeNoticeStore {
    * @returns true when the selected persistence mode holds the acknowledgement.
    */
   async acknowledge(): Promise<boolean> {
-    if (this.scope.getSnapshot().mode === 'memory') {
+    if (this.usesProcessLocalAck(this.scope.getSnapshot())) {
       this.localAcknowledged = true
       this.derive()
       return true
@@ -102,10 +101,14 @@ export class WelcomeNoticeStore {
     this.following = undefined
   }
 
+  private usesProcessLocalAck(scope: SettingsScopeSnapshot<WelcomeSection>): boolean {
+    return scope.mode === 'memory' || (scope.status !== 'loading' && !scope.writable)
+  }
+
   private derive(): void {
     if (this.saving) return
     const scope = this.scope.getSnapshot()
-    if (scope.mode === 'memory') {
+    if (this.usesProcessLocalAck(scope)) {
       this.store.update((state) => {
         state.status = 'ready'
         state.acknowledged = this.localAcknowledged

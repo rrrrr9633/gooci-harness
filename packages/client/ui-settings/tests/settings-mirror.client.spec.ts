@@ -17,8 +17,8 @@ function rejected<T>(message: string): Answer<T> {
 }
 
 /** The providing plugin's context, scripted down to the one method the mirror calls. */
-function ctxWith(describeCall: unknown) {
-  return { remote: { settings: { describe: describeCall } } } as never
+function ctxWith(describeCall: unknown, isLoopback = true) {
+  return { remote: { $host: { home: undefined, isLoopback }, settings: { describe: describeCall } } } as never
 }
 
 function view(ns: string, revision = 0): SettingsNamespaceView {
@@ -101,6 +101,18 @@ describe('SettingsDescribeMirror', () => {
     await mirror.load()
     expect(mirror.getSnapshot()).toEqual({ status: 'unavailable', view: undefined, error: null })
     expect(describeCall).not.toHaveBeenCalled()
+  })
+
+  it('marks a remote Host document read-only without dropping the view', async () => {
+    const describeCall = vi.fn().mockResolvedValueOnce(described([view('theme', 1)]))
+    const mirror = new SettingsDescribeMirror(ctxWith(describeCall, false))
+    await mirror.load()
+    expect(mirror.getSnapshot()).toMatchObject({
+      status: 'ready',
+      view: { writable: false, hasDocument: true },
+      error: null,
+    })
+    expect(mirror.namespace('theme')?.revision).toBe(1)
   })
 
   it('acceptView folds one write answer into the held view without a wire read', async () => {

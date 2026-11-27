@@ -42,8 +42,9 @@ function acknowledgedNamespace(version: string, revision = 1) {
 function buildWelcome(
   api: { describe?: ReturnType<typeof vi.fn>; mutate?: ReturnType<typeof vi.fn> },
   persistence: 'host' | 'memory' = 'host',
+  isLoopback = true,
 ) {
-  const ctx = { remote: { settings: api } } as never
+  const ctx = { remote: { $host: { home: undefined, isLoopback }, settings: api } } as never
   const mirror = new SettingsDescribeMirror(ctx, persistence)
   const scope = new SettingsScopeController(
     ctx,
@@ -68,6 +69,22 @@ describe('WelcomeNoticeStore', () => {
     await controller.load()
     expect(controller.store.getSnapshot()).toEqual({ status: 'ready', acknowledged: true, error: null })
     expect(describeCall).not.toHaveBeenCalled()
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('acknowledges in process memory when the Host snapshot is read-only', async () => {
+    const describeCall = vi.fn(() => Promise.resolve(ok({
+      writable: true, hasDocument: false, namespaces: [namespace()],
+    })))
+    const mutate = vi.fn()
+    const { mirror, controller } = buildWelcome({ describe: describeCall, mutate }, 'host', false)
+    await mirror.load()
+    await controller.load()
+    expect(controller.store.getSnapshot()).toEqual({ status: 'ready', acknowledged: false, error: null })
+    await expect(controller.acknowledge()).resolves.toBe(true)
+    expect(controller.store.getSnapshot()).toEqual({ status: 'ready', acknowledged: true, error: null })
+    await controller.load()
+    expect(controller.store.getSnapshot()).toEqual({ status: 'ready', acknowledged: true, error: null })
     expect(mutate).not.toHaveBeenCalled()
   })
 

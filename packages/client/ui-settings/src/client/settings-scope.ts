@@ -57,7 +57,7 @@ export class SettingsScopeController<T> implements SettingsScope<T> {
    * namespace carries this scope's writes (reads ride the mirror).
    * @param spec - namespace identity and optional narrowing decoder.
    * @param mirror - the shared describe mirror this scope derives from.
-   * @param persistence - client-selected Host persistence; non-loopback pages may remain process-local.
+   * @param persistence - client-selected Host persistence; memory mode never writes.
    * @param schema - settings-owned schema operations.
    */
   constructor(
@@ -124,6 +124,9 @@ export class SettingsScopeController<T> implements SettingsScope<T> {
    * @returns settlement after the mutation and any latest-write recovery read.
    */
   mutate(ops: readonly SettingsPathOpView[], expectedRevision?: number): Promise<void> {
+    // A remote page still derives from the Host document. Writes stay
+    // Host-owned: drop them here so they never race the /api fence.
+    if (!this.ctx.remote.$host.isLoopback) return Promise.resolve()
     const ownedOps = structuredClone(ops) as SettingsPathOpView[]
     const generation = ++this.writeGeneration
     return this.enqueue(async () => {
@@ -243,8 +246,7 @@ export class SettingsScopeBinder extends Service {
   /**
    * @param ctx - the providing plugin's context.
    * @param config - the shared describe mirror every bound scope derives from,
-   * the settings-owned schema operations, and the Host persistence the provider
-   * resolved from `remote.$host`.
+   * the settings-owned schema operations, and Host vs memory persistence.
    */
   constructor(ctx: Context, config: {
     mirror: SettingsDescribeMirror

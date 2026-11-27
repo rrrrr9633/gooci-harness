@@ -26,7 +26,7 @@ export interface SettingsDescribeView {
 /** Mirror state every derived settings surface renders from. */
 export interface SettingsMirrorSnapshot {
   /**
-   * `unavailable` is the terminal non-loopback state; `ready` persists across
+   * `unavailable` is the terminal memory-mode state; `ready` persists across
    * later failed refreshes (the held view keeps serving); `idle` means no
    * answer is held and no read is running, so `ensure` will start one.
    */
@@ -79,7 +79,7 @@ export class SettingsDescribeMirror implements SettingsDescribeFace {
   /**
    * @param ctx - the providing plugin's context, whose `remote.settings`
    * namespace answers the describe read.
-   * @param persistence - client-selected Host persistence; non-loopback pages may remain process-local.
+   * @param persistence - client-selected Host persistence; memory mode never reads the Host.
    */
   constructor(
     private readonly ctx: ClientContext,
@@ -190,7 +190,10 @@ export class SettingsDescribeMirror implements SettingsDescribeFace {
         // A write answer invalidates a document read before that write committed.
         if (generation !== this.generation) continue
         if ('view' in outcome) {
-          this.store.set({ status: 'ready', view: outcome.view, error: null })
+          const view = !this.ctx.remote.$host.isLoopback
+            ? { ...outcome.view, writable: false }
+            : outcome.view
+          this.store.set({ status: 'ready', view, error: null })
         } else {
           const held = this.store.getSnapshot()
           // No answer yet: fall back to idle so `ensure` retries; with one, the
